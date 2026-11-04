@@ -87,6 +87,10 @@ export class IndexDB {
   #getStatement;
   #setStatement;
   #touchStatement;
+  #deleteStatement;
+  #totalSizeStatement;
+  #oldestStatement;
+  #deleteManyTransaction;
 
   /**
    * @param {{ dbPath?: string }} [options]
@@ -136,6 +140,31 @@ export class IndexDB {
         SET last_used = ?
         WHERE key = ?
       `);
+
+      this.#deleteStatement = this.#db.prepare(`
+        DELETE FROM cache_entries
+        WHERE key = ?
+      `);
+
+      this.#totalSizeStatement = this.#db.prepare(`
+        SELECT COALESCE(SUM(size), 0) AS total
+        FROM cache_entries
+      `);
+
+      this.#oldestStatement = this.#db.prepare(`
+        SELECT key, size, last_used
+        FROM cache_entries
+        ORDER BY last_used ASC, created_at ASC
+        LIMIT ?
+      `);
+
+      this.#deleteManyTransaction = this.#db.transaction((keys) => {
+        let deleted = 0;
+        for (const key of keys) {
+          deleted += this.#deleteStatement.run(key).changes;
+        }
+        return deleted;
+      });
     } catch (error) {
       try {
         this.#db?.close();
@@ -238,6 +267,68 @@ export class IndexDB {
   }
 
   /**
+   * Delete a single entry.
+   *
+   * @param {string} key
+   * @returns {boolean} True when an entry was deleted.
+   */
+  delete(key) {
+    assertKey(key);
+    this.#assertOpen();
+
+    return this.#deleteStatement.run(key).changes > 0;
+  }
+
+  /**
+   * Delete several entries inside one transaction.
+   *
+   * @param {string[]} keys
+   * @returns {number} Number of entries actually deleted.
+   */
+  deleteMany(keys) {
+    if (!Array.isArray(keys)) {
+      throw new TypeError('IndexDB: keys must be an array');
+    }
+    for (const key of keys) assertKey(key);
+
+    this.#assertOpen();
+    if (keys.length === 0) return 0;
+
+    return this.#deleteManyTransaction(keys);
+  }
+
+  /**
+   * Total size in bytes of every indexed entry.
+   *
+   * @returns {number}
+   */
+  totalSize() {
+    this.#assertOpen();
+    return this.#totalSizeStatement.get().total;
+  }
+
+  /**
+   * Return the least-recently-used entries, oldest first.
+   *
+   * @param {number} [limit]
+   * @returns {Array<{ key: string, size: number, lastUsed: number }>}
+   */
+  oldest(limit = 100) {
+    if (!Number.isSafeInteger(limit) || limit < 0) {
+      throw new TypeError('IndexDB: limit must be a non-negative integer');
+    }
+
+    this.#assertOpen();
+    if (limit === 0) return [];
+
+    return this.#oldestStatement.all(limit).map((row) => ({
+      key: row.key,
+      size: row.size,
+      lastUsed: row.last_used,
+    }));
+  }
+
+  /**
    * Close the SQLite connection. Safe to call more than once.
    */
   close() {
@@ -251,6 +342,10 @@ export class IndexDB {
     this.#getStatement = undefined;
     this.#setStatement = undefined;
     this.#touchStatement = undefined;
+    this.#deleteStatement = undefined;
+    this.#totalSizeStatement = undefined;
+    this.#oldestStatement = undefined;
+    this.#deleteManyTransaction = undefined;
   }
 }
 
