@@ -1,0 +1,15 @@
+{
+  "name": "cachenest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight, local-first caching reverse proxy for npm and pip packages.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^18.0.9",
+    "undici": "^7.30.1"
+  }
+}
