@@ -4,6 +4,10 @@
   "private": true,
   "description": "A lightweight, local-first caching reverse proxy for npm and pip packages.",
   "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
   "engines": {
     "node": ">=22.0.0"
   },

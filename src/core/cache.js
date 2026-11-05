@@ -195,6 +195,8 @@ function discardBody(body) {
 
   try {
     if (typeof body.destroy === 'function') {
+      // Destroying an undici body aborts the request and emits an error.
+      body.once?.('error', () => {});
       body.destroy();
     } else if (typeof body.cancel === 'function') {
       Promise.resolve(body.cancel()).catch(() => {});
