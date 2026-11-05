@@ -12,6 +12,15 @@ import {
   stripPrefix,
 } from './common.js';
 
+// npm replaces the registry host in dist.tarball URLs with the configured
+// registry host, but drops any path prefix such as /npm. Accept those
+// root-level tarball requests so installs still pass through the cache.
+const TARBALL_PATH_PATTERN = /^\/(?:@[^/]+\/)?[^/]+\/-\/[^/]+\.tgz$/;
+
+function isTarballPath(pathname) {
+  return TARBALL_PATH_PATTERN.test(pathname);
+}
+
 function normalizeUpstream(value) {
   const raw = value instanceof URL ? value.toString() : value;
 
@@ -98,16 +107,33 @@ export class NpmRouter {
   }
 
   /**
+   * Root-level tarball paths are accepted as a fallback because npm rewrites
+   * dist.tarball hosts without preserving the registry URL path.
+   *
+   * @param {string} pathname
+   * @returns {boolean}
+   */
+  matchesTarball(pathname) {
+    return isTarballPath(pathname);
+  }
+
+  /**
    * @param {import('node:http').IncomingMessage} request
    * @param {import('node:http').ServerResponse} response
    */
   async handle(request, response) {
     const method = requireReadMethod(request.method);
     const { pathname, search, keyPath } = parseRequestTarget(request.url);
-    const rest = stripPrefix(pathname, this.prefix);
+    let rest = stripPrefix(pathname, this.prefix);
+    let cachePath = keyPath;
 
     if (rest === null) {
-      throw new HttpError(404, 'Not found', { code: 'NOT_FOUND' });
+      if (!this.matchesTarball(pathname)) {
+        throw new HttpError(404, 'Not found', { code: 'NOT_FOUND' });
+      }
+
+      rest = pathname;
+      cachePath = `${this.prefix === '/' ? '' : this.prefix}${pathname}${search}`;
     }
 
     assertRelativePath(rest);
@@ -116,7 +142,7 @@ export class NpmRouter {
     // join it explicitly rather than letting WHATWG URL replace it.
     const targetPath = joinUrlPath(this.basePath, rest);
     const target = `${targetPath}${search}`;
-    const key = createCacheKey(method, keyPath);
+    const key = createCacheKey(method, cachePath);
 
     return this.cache.handle(request, response, {
       key,

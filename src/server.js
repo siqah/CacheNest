@@ -391,7 +391,8 @@ export class CacheNestServer {
       return;
     }
 
-    const route = this.routes.find((candidate) => candidate.matches(pathname));
+    const route = this.routes.find((candidate) => candidate.matches(pathname))
+      ?? (this.npmRouter.matchesTarball(pathname) ? this.npmRouter : undefined);
     if (route === undefined) {
       throw new HttpError(404, 'Not found', { code: 'NOT_FOUND' });
     }
