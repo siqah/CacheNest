@@ -79,6 +79,55 @@ Example response:
 
 ---
 
+## Running on a laptop
+
+A laptop is the best place to develop and test CacheNest before deploying it to a Raspberry Pi, home server, or shared lab machine.
+
+To use port `8787`, bind only to the local machine, and keep the cache inside the project directory:
+
+```bash
+PORT=8787 HOST=127.0.0.1 CACHE_DIR=./data npm start
+```
+
+This creates:
+
+```text
+./data/index.sqlite   SQLite cache index
+./data/blobs/         Cached package files
+```
+
+The repository defaults are `PORT=8080`, `HOST=0.0.0.0`, and `CACHE_DIR=~/.cachenest`; the command above overrides them for a local-only laptop setup.
+
+Laptop-specific advantages:
+
+- **Fast local I/O:** An SSD makes cache reads very fast, so repeat installs can feel almost instant.
+- **Offline reuse:** Once a package's metadata and files are cached, it can be installed again without internet access. New packages still require the upstream registry.
+- **Easy cleanup:** Keeping the cache in `./data` makes it simple to inspect, back up, or delete.
+
+Check whether the chosen port is already in use:
+
+```bash
+lsof -nP -iTCP:8787 -sTCP:LISTEN
+```
+
+If that command returns a process, choose another port and update the URLs below accordingly.
+
+Point npm at the local instance:
+
+```bash
+npm install lodash --registry http://127.0.0.1:8787/npm
+```
+
+Point pip at the local instance:
+
+```bash
+python3 -m pip install six \
+  --index-url http://127.0.0.1:8787/pypi/simple \
+  --trusted-host 127.0.0.1
+```
+
+---
+
 ## Configuration
 
 CacheNest reads configuration from environment variables. A `.env` file is loaded automatically.

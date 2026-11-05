@@ -5,6 +5,7 @@ node_modules/
 
 # Local cache data
 cache/
+data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
