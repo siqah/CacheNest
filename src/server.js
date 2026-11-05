@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 
-import config from './config.js';
-import Cache from './core/cache.js';
-import Eviction from './core/eviction.js';
-import IndexDB from './core/index-db.js';
-import BlobStore from './core/store.js';
-import createNpmRouter from './routes/npm.js';
-import createPypiRouter from './routes/pypi.js';
+import { config } from './config.js';
+import { Cache } from './core/cache.js';
+import { Eviction } from './core/eviction.js';
+import { IndexDB } from './core/index-db.js';
+import { BlobStore } from './core/store.js';
+import { createNpmRouter } from './routes/npm.js';
+import { createPypiRouter } from './routes/pypi.js';
 import { HttpError, parseRequestTarget, requireReadMethod } from './routes/common.js';
 
 const DEFAULT_HOST = '0.0.0.0';
@@ -41,7 +41,7 @@ function logLine(logger, level, message) {
  *
  * @param {{ logger?: { info?: Function, error?: Function, warn?: Function } | Function | null }} [options]
  */
-export function createRequestLogger({ logger = console } = {}) {
+function createRequestLogger({ logger = console } = {}) {
   return function requestLogger(request, response, next) {
     const started = process.hrtime.bigint();
     const requestId = randomUUID();
@@ -69,62 +69,8 @@ export function createRequestLogger({ logger = console } = {}) {
       if (!response.writableFinished) finish('aborted');
     });
 
-    next();
+    return next();
   };
-}
-
-function runMiddlewareStack(middlewares, request, response, terminal) {
-  return new Promise((resolve, reject) => {
-    let index = 0;
-    let settled = false;
-
-    const settle = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      callback(value);
-    };
-
-    const dispatch = (error) => {
-      if (error) {
-        settle(reject, error);
-        return;
-      }
-
-      if (settled) return;
-
-      const middleware = middlewares[index];
-      index += 1;
-
-      if (middleware === undefined) {
-        Promise.resolve()
-          .then(() => terminal(request, response))
-          .then((value) => settle(resolve, value), (terminalError) => settle(reject, terminalError));
-        return;
-      }
-
-      let nextCalled = false;
-      const next = (nextError) => {
-        if (nextCalled) {
-          settle(reject, new Error('Middleware called next() more than once'));
-          return;
-        }
-
-        nextCalled = true;
-        dispatch(nextError);
-      };
-
-      try {
-        const result = middleware(request, response, next);
-        if (result !== null && result !== undefined && typeof result.then === 'function') {
-          result.catch((middlewareError) => settle(reject, middlewareError));
-        }
-      } catch (middlewareError) {
-        settle(reject, middlewareError);
-      }
-    };
-
-    dispatch();
-  });
 }
 
 function sendJson(response, statusCode, payload, { headers = {}, head = false } = {}) {
@@ -246,14 +192,11 @@ export class CacheNestServer {
     this.pypiRouter = pypiRouter;
     this.routes.push(npmRouter, pypiRouter);
 
-    const middlewares = [createRequestLogger({ logger })];
+    const requestLogger = createRequestLogger({ logger });
     this.#requestHandler = (request, response) => {
-      void runMiddlewareStack(
-        middlewares,
-        request,
-        response,
-        () => this.#dispatch(request, response),
-      ).catch((error) => this.#handleError(error, request, response));
+      Promise.resolve()
+        .then(() => requestLogger(request, response, () => this.#dispatch(request, response)))
+        .catch((error) => this.#handleError(error, request, response));
     };
 
     this.server = http.createServer(this.#requestHandler);
@@ -442,5 +385,3 @@ export class CacheNestServer {
 export function createServer(options) {
   return new CacheNestServer(options);
 }
-
-export default createServer;

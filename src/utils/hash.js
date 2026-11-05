@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
  * @param {string} value
  * @returns {string} 64-character lowercase hex digest
  */
-export function hashString(value) {
+function hashString(value) {
   if (typeof value !== 'string') {
     throw new TypeError('hashString expects a string');
   }
@@ -36,5 +36,3 @@ export function createCacheKey(method, url) {
 
   return hashString(`${method.trim().toUpperCase()} ${url.trim()}`);
 }
-
-export default createCacheKey;

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
-import config from '../config.js';
+import { config } from '../config.js';
 
 const KEY_PATTERN = /^[a-f0-9]{64}$/;
 
@@ -146,30 +146,6 @@ export class BlobStore {
   }
 
   /**
-   * Fetch metadata for a blob without opening it.
-   *
-   * @param {string} key
-   * @returns {Promise<{ key: string, path: string, size: number, mtimeMs: number } | null>}
-   */
-  async stat(key) {
-    assertKey(key);
-    const blobPath = this.pathForKey(key);
-
-    try {
-      const stats = await fs.promises.stat(blobPath);
-      if (!stats.isFile()) return null;
-
-      return { key, path: blobPath, size: stats.size, mtimeMs: stats.mtimeMs };
-    } catch (error) {
-      if (error.code === 'ENOENT') return null;
-
-      throw new Error(`BlobStore: failed to stat blob "${key}": ${error.message}`, {
-        cause: error,
-      });
-    }
-  }
-
-  /**
    * Open a blob for reading. The returned stream owns the file descriptor and
    * closes it automatically when consumed or destroyed.
    *
@@ -213,14 +189,6 @@ export class BlobStore {
   }
 
   /**
-   * @param {string} key
-   * @returns {Promise<boolean>}
-   */
-  async has(key) {
-    return (await this.stat(key)) !== null;
-  }
-
-  /**
    * Delete a blob. Missing files are not an error.
    *
    * @param {string} key
@@ -241,5 +209,3 @@ export class BlobStore {
     }
   }
 }
-
-export default BlobStore;

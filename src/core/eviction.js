@@ -1,4 +1,4 @@
-import config from '../config.js';
+import { config } from '../config.js';
 
 /**
  * LRU eviction backed by the SQLite index.
@@ -144,5 +144,3 @@ export class Eviction {
     }
   }
 }
-
-export default Eviction;

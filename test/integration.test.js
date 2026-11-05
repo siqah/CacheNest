@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import createServer from '../src/server.js';
+import { createServer } from '../src/server.js';
 
 const NPM_TARBALL = Buffer.from('fake npm tarball bytes for the cache test');
 const PYPI_WHEEL = Buffer.from('fake pypi wheel bytes for the cache test');
@@ -140,11 +140,6 @@ async function createMockUpstream() {
     origin: `http://127.0.0.1:${server.address().port}`,
     hitsFor(pathname) {
       return hits.get(pathname) ?? 0;
-    },
-    totalHits() {
-      let total = 0;
-      for (const count of hits.values()) total += count;
-      return total;
     },
   };
 }

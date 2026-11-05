@@ -14,7 +14,7 @@ function formatHost(address) {
  * @returns {Promise<import('./server.js').CacheNestServer>}
  */
 export async function main() {
-  const [{ default: config }, { default: createServer }] = await Promise.all([
+  const [{ config }, { createServer }] = await Promise.all([
     import('./config.js'),
     import('./server.js'),
   ]);
@@ -105,5 +105,3 @@ if (isMain) {
     process.exitCode = 1;
   });
 }
-
-export default main;

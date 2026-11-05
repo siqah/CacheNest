@@ -1,6 +1,6 @@
-import config from '../config.js';
-import createCacheKey from '../utils/hash.js';
-import UpstreamForwarder from '../upstream/forward.js';
+import { config } from '../config.js';
+import { createCacheKey } from '../utils/hash.js';
+import { UpstreamForwarder } from '../upstream/forward.js';
 import {
   HttpError,
   assertRelativePath,
@@ -59,7 +59,7 @@ function assertForwarder(forwarder) {
 /**
  * Handles npm registry traffic mounted at /npm.
  */
-export class NpmRouter {
+class NpmRouter {
   #ownsForwarder;
 
   /**
@@ -86,16 +86,15 @@ export class NpmRouter {
     this.prefix = normalizePrefix(prefix);
 
     const upstreamUrl = normalizeUpstream(upstream);
-    this.upstream = upstreamUrl.toString().replace(/\/+$/, '');
+    const upstreamBase = upstreamUrl.toString().replace(/\/+$/, '');
     this.basePath = upstreamUrl.pathname;
 
     if (forwarder !== undefined) assertForwarder(forwarder);
     this.forwarder = forwarder ?? new UpstreamForwarder({
-      baseUrl: this.upstream,
+      baseUrl: upstreamBase,
       logger,
     });
     this.#ownsForwarder = forwarder === undefined;
-    this.logger = logger;
   }
 
   /**
@@ -172,5 +171,3 @@ export class NpmRouter {
 export function createNpmRouter(options) {
   return new NpmRouter(options);
 }
-
-export default createNpmRouter;

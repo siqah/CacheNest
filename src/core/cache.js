@@ -1,11 +1,11 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
-import config from '../config.js';
-import createCacheKey from '../utils/hash.js';
-import IndexDB from './index-db.js';
-import BlobStore from './store.js';
-import Eviction from './eviction.js';
+import { config } from '../config.js';
+import { createCacheKey } from '../utils/hash.js';
+import { IndexDB } from './index-db.js';
+import { BlobStore } from './store.js';
+import { Eviction } from './eviction.js';
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -344,15 +344,6 @@ export class Cache {
   }
 
   /**
-   * Remove a blob and its index entry.
-   *
-   * @param {string} key
-   */
-  async invalidate(key) {
-    await this.#invalidate(key);
-  }
-
-  /**
    * Close the SQLite connection if this instance created it.
    */
   close() {
@@ -561,5 +552,3 @@ export class Cache {
     }
   }
 }
-
-export default Cache;

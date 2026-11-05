@@ -19,7 +19,7 @@ const TIMEOUT_CODES = new Set([
   'UND_ERR_BODY_TIMEOUT',
 ]);
 
-export class UpstreamError extends Error {
+class UpstreamError extends Error {
   /**
    * @param {string} message Internal diagnostic message.
    * @param {{
@@ -218,33 +218,25 @@ function createErrorResponse(error) {
 export class UpstreamForwarder {
   #baseUrl;
   #dispatcher;
-  #ownsDispatcher;
   #headersTimeout;
   #bodyTimeout;
-  #throwOnError;
   #logger;
   #closed;
 
   /**
    * @param {{
    *   baseUrl?: string | URL,
-   *   dispatcher?: import('undici').Dispatcher,
-   *   dispatcherOptions?: import('undici').Agent.Options,
    *   maxRedirections?: number,
    *   headersTimeout?: number,
    *   bodyTimeout?: number,
-   *   throwOnError?: boolean,
    *   logger?: { warn?: Function } | Function | null,
    * }} [options]
    */
   constructor({
     baseUrl,
-    dispatcher,
-    dispatcherOptions,
     maxRedirections = 5,
     headersTimeout = 30_000,
     bodyTimeout = 300_000,
-    throwOnError = false,
     logger = console,
   } = {}) {
     if (!Number.isSafeInteger(maxRedirections) || maxRedirections < 0) {
@@ -262,26 +254,13 @@ export class UpstreamForwarder {
     this.#baseUrl = normalizeBaseUrl(baseUrl);
     this.#headersTimeout = headersTimeout;
     this.#bodyTimeout = bodyTimeout;
-    this.#throwOnError = Boolean(throwOnError);
     this.#logger = logger;
     this.#closed = false;
 
-    if (dispatcher !== undefined) {
-      if (!dispatcher || typeof dispatcher.dispatch !== 'function') {
-        throw new TypeError('UpstreamForwarder: dispatcher must be an undici Dispatcher');
-      }
-
-      this.#dispatcher = maxRedirections > 0 && typeof dispatcher.compose === 'function'
-        ? dispatcher.compose(interceptors.redirect({ maxRedirections }))
-        : dispatcher;
-      this.#ownsDispatcher = false;
-    } else {
-      const agent = new Agent(dispatcherOptions ?? {});
-      this.#dispatcher = maxRedirections > 0
-        ? agent.compose(interceptors.redirect({ maxRedirections }))
-        : agent;
-      this.#ownsDispatcher = true;
-    }
+    const agent = new Agent();
+    this.#dispatcher = maxRedirections > 0
+      ? agent.compose(interceptors.redirect({ maxRedirections }))
+      : agent;
   }
 
   /**
@@ -349,24 +328,20 @@ export class UpstreamForwarder {
         upstreamError,
       );
 
-      if (this.#throwOnError) throw upstreamError;
       return createErrorResponse(upstreamError);
     }
   }
 
   /**
-   * Close the internally created undici Agent. An injected dispatcher is left
-   * untouched. Safe to call more than once.
+   * Close the undici connection pool. Safe to call more than once.
    */
   async close() {
     if (this.#closed) return;
     this.#closed = true;
 
-    if (this.#ownsDispatcher && this.#dispatcher) {
-      const dispatcher = this.#dispatcher;
-      this.#dispatcher = undefined;
-      await dispatcher.close();
-    }
+    const dispatcher = this.#dispatcher;
+    this.#dispatcher = undefined;
+    await dispatcher?.close();
   }
 
   #warn(message, error) {
@@ -381,13 +356,3 @@ export class UpstreamForwarder {
     }
   }
 }
-
-/**
- * @param {ConstructorParameters<typeof UpstreamForwarder>[0]} [options]
- * @returns {UpstreamForwarder}
- */
-export function createForwarder(options) {
-  return new UpstreamForwarder(options);
-}
-
-export default createForwarder;

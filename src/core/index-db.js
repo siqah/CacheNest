@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
-import config from '../config.js';
+import { config } from '../config.js';
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS cache_entries (
@@ -348,5 +348,3 @@ export class IndexDB {
     this.#deleteManyTransaction = undefined;
   }
 }
-
-export default IndexDB;

@@ -1,8 +1,8 @@
 import { Readable } from 'node:stream';
 
-import config from '../config.js';
-import createCacheKey from '../utils/hash.js';
-import UpstreamForwarder from '../upstream/forward.js';
+import { config } from '../config.js';
+import { createCacheKey } from '../utils/hash.js';
+import { UpstreamForwarder } from '../upstream/forward.js';
 import {
   HttpError,
   assertRelativePath,
@@ -204,7 +204,7 @@ function isPathOrChild(pathname, base) {
  * root-relative /pypi/files/... URLs so pip's downloads also pass through the
  * cache.
  */
-export class PypiRouter {
+class PypiRouter {
   #ownsSimpleForwarder;
   #ownsFilesForwarder;
 
@@ -517,5 +517,3 @@ export class PypiRouter {
 export function createPypiRouter(options) {
   return new PypiRouter(options);
 }
-
-export default createPypiRouter;

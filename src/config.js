@@ -6,7 +6,7 @@ dotenv.config({ quiet: true });
 
 const BYTES_PER_GB = 1024 ** 3;
 
-export class ConfigError extends Error {
+class ConfigError extends Error {
   constructor(message) {
     super(`[config] ${message}`);
     this.name = 'ConfigError';
@@ -118,5 +118,3 @@ export const config = Object.freeze({
     pypi: parseUpstream('UPSTREAM_PYPI', readEnv('UPSTREAM_PYPI'), DEFAULTS.upstreamPypi),
   }),
 });
-
-export default config;
