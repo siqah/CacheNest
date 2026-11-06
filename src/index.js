@@ -8,6 +8,15 @@ function formatHost(address) {
   return address.includes(':') ? `[${address}]` : address;
 }
 
+function clientHostFor(host) {
+  const normalized = host.trim();
+  if (normalized === '0.0.0.0' || normalized === '::' || normalized === '[::]') {
+    return '127.0.0.1';
+  }
+
+  return normalized;
+}
+
 /**
  * Load configuration, start the HTTP proxy, and install signal/error handlers.
  *
@@ -31,13 +40,21 @@ export async function main() {
   }
 
   const address = app.address();
-  const displayAddress = typeof address === 'object' && address !== null
+  const isAddressInfo = typeof address === 'object' && address !== null;
+  const displayAddress = isAddressInfo
     ? `${formatHost(address.address)}:${address.port}`
     : String(address);
+  const port = isAddressInfo ? address.port : config.port;
+  const clientHost = clientHostFor(host);
+  const baseUrl = `http://${formatHost(clientHost)}:${port}`;
 
   logger.info(`[cachenest] listening on http://${displayAddress}`);
   logger.info(
     `[cachenest] cache ${config.cacheDir} (max ${config.maxCacheGb} GB), npm ${config.upstream.npm}, pypi ${config.upstream.pypi}`,
+  );
+  logger.info(`[cachenest] npm: npm install <package> --registry ${baseUrl}/npm`);
+  logger.info(
+    `[cachenest] pip: python3 -m pip install <package> --index-url ${baseUrl}/pypi/simple --trusted-host ${clientHost}`,
   );
 
   let shuttingDown = false;

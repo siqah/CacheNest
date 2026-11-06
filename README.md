@@ -55,9 +55,10 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 
 ```bash
 npm install
-cp .env.example .env
 npm start
 ```
+
+CacheNest runs with sensible defaults and does not require a `.env` file. When it starts, it prints copy-paste npm and pip commands for the current host and port.
 
 By default the server listens on:
 
@@ -76,6 +77,8 @@ Example response:
 ```json
 {"status":"ok","uptimeSeconds":3,"cacheBytes":0}
 ```
+
+To customize the port, host, cache location, size limit, or upstreams, copy `.env.example` to `.env` and edit it. See [Configuration](#configuration).
 
 ---
 
