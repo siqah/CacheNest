@@ -6,6 +6,8 @@ import { Cache } from './core/cache.js';
 import { Eviction } from './core/eviction.js';
 import { IndexDB } from './core/index-db.js';
 import { BlobStore } from './core/store.js';
+import { createAuthMiddleware } from './middleware/auth.js';
+import { Metrics, createMetricsMiddleware, sendMetrics } from './middleware/metrics.js';
 import { createNpmRouter } from './routes/npm.js';
 import { createPypiRouter } from './routes/pypi.js';
 import { HttpError, parseRequestTarget, requireReadMethod } from './routes/common.js';
@@ -111,12 +113,14 @@ export class CacheNestServer {
    *     pypi?: string | URL,
    *     pypiFiles?: string | URL,
    *   },
+   *   metrics?: import('./middleware/metrics.js').Metrics,
    * }} [options]
    */
   constructor({
     config: appConfig = config,
     logger = console,
     upstreams = {},
+    metrics = new Metrics(),
   } = {}) {
     if (
       appConfig === null
@@ -137,6 +141,7 @@ export class CacheNestServer {
 
     this.config = appConfig;
     this.logger = logger;
+    this.metrics = metrics;
     this.routes = [];
     this.#started = false;
 
@@ -193,9 +198,26 @@ export class CacheNestServer {
     this.routes.push(npmRouter, pypiRouter);
 
     const requestLogger = createRequestLogger({ logger });
+    const metricsMiddleware = createMetricsMiddleware({ metrics: this.metrics });
+    const authMiddleware = createAuthMiddleware({ apiKey: appConfig.apiKey ?? null });
+
+    const handler = (request, response) => requestLogger(
+      request,
+      response,
+      () => metricsMiddleware(
+        request,
+        response,
+        () => authMiddleware(
+          request,
+          response,
+          () => this.#dispatch(request, response),
+        ),
+      ),
+    );
+
     this.#requestHandler = (request, response) => {
       Promise.resolve()
-        .then(() => requestLogger(request, response, () => this.#dispatch(request, response)))
+        .then(() => handler(request, response))
         .catch((error) => this.#handleError(error, request, response));
     };
 
@@ -334,13 +356,19 @@ export class CacheNestServer {
       return;
     }
 
+    if (pathname === '/metrics') {
+      requireReadMethod(request.method);
+      sendMetrics(response, this.metrics, { head: request.method === 'HEAD' });
+      return;
+    }
+
     const route = this.routes.find((candidate) => candidate.matches(pathname))
       ?? (this.npmRouter.matchesTarball(pathname) ? this.npmRouter : undefined);
     if (route === undefined) {
       throw new HttpError(404, 'Not found', { code: 'NOT_FOUND' });
     }
 
-    await route.handle(request, response);
+    return route.handle(request, response);
   }
 
   #handleError(error, request, response) {

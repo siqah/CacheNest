@@ -122,12 +122,15 @@ export class BlobStore {
     const tempPath = path.join(directory, `.${key}.${randomUUID()}.tmp`);
 
     try {
+      // `flush` asks the OS to persist the completed temp file before the
+      // atomic rename. The rename then guarantees readers only ever see either
+      // no blob or the complete blob, even after an interrupted download.
       if (readable === null) {
-        await fs.promises.writeFile(tempPath, source, { flag: 'wx', signal });
+        await fs.promises.writeFile(tempPath, source, { flag: 'wx', flush: true, signal });
       } else {
         await pipeline(
           readable,
-          fs.createWriteStream(tempPath, { flags: 'wx' }),
+          fs.createWriteStream(tempPath, { flags: 'wx', flush: true }),
           { signal },
         );
       }

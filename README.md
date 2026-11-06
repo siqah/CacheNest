@@ -35,6 +35,8 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 - Handles npm tarball URLs that lose their `/npm` path because of npm's registry-host rewriting.
 - Streams downloads to the client while writing them to disk concurrently.
 - Stores blobs atomically, so interrupted downloads do not leave partial cache entries.
+- Supports optional API-key authentication for proxy, health, and metrics routes.
+- Exposes Prometheus-compatible cache and bandwidth metrics at `/metrics`.
 - Tracks entries in SQLite with size, creation time, and last-used time.
 - Enforces a size limit with LRU eviction.
 - Serves `GET` and `HEAD`; rejects write methods.
@@ -139,6 +141,7 @@ CacheNest reads configuration from environment variables. A `.env` file is loade
 |---|---|---|
 | `PORT` | `8080` | HTTP port to listen on. |
 | `HOST` | `0.0.0.0` | Interface to bind. Use `127.0.0.1` for local-only access. |
+| `API_KEY` | unset | Optional API key. When set, all routes require authentication. |
 | `CACHE_DIR` | `~/.cachenest` | Directory for `index.sqlite` and cached blobs. Supports `~/`. |
 | `MAX_CACHE_GB` | `5` | Maximum cache size in GB. Fractions such as `0.5` are allowed. |
 | `UPSTREAM_NPM` | `https://registry.npmjs.org` | npm registry base URL. |
@@ -147,6 +150,7 @@ CacheNest reads configuration from environment variables. A `.env` file is loade
 Example `.env`:
 
 ```env
+API_KEY=
 PORT=8080
 HOST=0.0.0.0
 CACHE_DIR=~/.cachenest
@@ -160,6 +164,86 @@ To keep cached data inside a project or temporary directory, set `CACHE_DIR` exp
 ```bash
 CACHE_DIR=./data PORT=8080 npm start
 ```
+
+---
+
+## Authentication
+
+Authentication is disabled when `API_KEY` is unset, which is the default for local use. Set `API_KEY` to protect every route, including `/health` and `/metrics`.
+
+Clients can authenticate with any of these forms:
+
+```text
+Authorization: Bearer <API_KEY>
+x-cachenest-key: <API_KEY>
+```
+
+Basic authentication is also accepted, with the API key as either the username or password. This allows pip to use its standard credentials-in-URL form.
+
+Check authentication with curl:
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8080/health
+```
+
+For npm, a project-local `.npmrc` can contain:
+
+```ini
+registry=http://127.0.0.1:8080/npm
+//127.0.0.1:8080/npm/:_authToken=${API_KEY}
+```
+
+For pip, the API key can be passed as the password:
+
+```bash
+python3 -m pip install six \
+  --index-url "http://cachenest:$API_KEY@127.0.0.1:8080/pypi/simple" \
+  --trusted-host 127.0.0.1
+```
+
+Credentials in a URL may appear in shell history or process listings. For shared systems, prefer a credentials file or environment-based configuration.
+
+When authentication is enabled, CacheNest removes its own auth headers before forwarding the request. This prevents the API key from reaching upstream registries and keeps package responses cacheable.
+
+---
+
+## Metrics
+
+`GET /metrics` exposes Prometheus text-format metrics:
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `cachenest_requests_total` | counter | Requests handled, excluding `/metrics` scrapes. |
+| `cachenest_cache_hits_total` | counter | Cache lookups served from local disk. |
+| `cachenest_cache_misses_total` | counter | Cache lookups that required an upstream fetch. |
+| `cachenest_bandwidth_served_bytes_total` | counter | Response body bytes sent to clients. |
+| `cachenest_bandwidth_saved_bytes_total` | counter | Bytes served from cache instead of upstream. |
+| `cachenest_uptime_seconds` | gauge | Process uptime in seconds. |
+
+Example:
+
+```bash
+curl http://127.0.0.1:8080/metrics
+```
+
+If `API_KEY` is set, the scrape request must include it:
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8080/metrics
+```
+
+Prometheus scrape configuration:
+
+```yaml
+scrape_configs:
+  - job_name: cachenest
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+    authorization:
+      credentials: "<API_KEY>"   # omit when API_KEY is not set
+```
+
+Metrics are in memory and reset when CacheNest restarts.
 
 ---
 
@@ -232,6 +316,7 @@ The `--trusted-host` flag is required because `pip` is talking to a plain HTTP l
 | `GET/HEAD /pypi/files/{path}` | `files.pythonhosted.org` | Rewritten PyPI package files. |
 | `GET/HEAD /pypi/packages/{path}` | `files.pythonhosted.org` | PyPI package files. |
 | `GET/HEAD /health` | none | Health and cache size. |
+| `GET/HEAD /metrics` | none | Prometheus metrics. |
 
 ---
 
@@ -253,6 +338,9 @@ It covers:
 - PyPI JSON and HTML link rewriting
 - wheel downloads and cache hits
 - `HEAD`, `405`, `/health`, and graceful shutdown
+- API-key authentication and auth-header stripping
+- Prometheus metrics and scrape exclusion
+- atomic blob writes and failed-download cleanup
 
 ### Live test against real registries
 
@@ -322,6 +410,9 @@ src/
     eviction.js         LRU enforcement
     index-db.js         SQLite cache index
     store.js            Atomic sharded blob storage
+  middleware/
+    auth.js             Optional API-key authentication
+    metrics.js          Request, cache, and bandwidth metrics
   routes/
     common.js           Shared route helpers
     npm.js              npm metadata and tarball routing
@@ -331,7 +422,9 @@ src/
   utils/
     hash.js             SHA-256 cache keys
 test/
+  auth-metrics.test.js  Authentication and metrics integration tests
   integration.test.js   Offline npm/PyPI integration tests
+  store.test.js         Atomic blob-write tests
 ```
 
 ---
@@ -339,8 +432,10 @@ test/
 ## Deployment notes
 
 - CacheNest does not terminate TLS. Use a reverse proxy such as Caddy, nginx, or Traefik for shared or internet-facing deployments.
-- CacheNest has no built-in authentication. Bind to `127.0.0.1` or keep it on a trusted network.
+- Set `API_KEY` before exposing CacheNest beyond a trusted local machine.
+- Without `API_KEY`, CacheNest has no authentication. Bind to `127.0.0.1` or keep it on a trusted network.
 - Set `CACHE_DIR` to a disk with enough capacity for your dependency set.
+- Metrics are per-process. If you run multiple CacheNest instances, scrape each one separately or aggregate them in Prometheus.
 - SQLite runs in WAL mode; include the `-wal` and `-shm` files when backing up a live cache directory.
 - The server drains in-flight requests during graceful shutdown.
 

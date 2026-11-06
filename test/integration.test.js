@@ -144,6 +144,12 @@ async function createMockUpstream() {
   };
 }
 
+function metricValue(body, name) {
+  const match = body.match(new RegExp(`^${name} (\\d+(?:\\.\\d+)?)$`, 'm'));
+  assert.ok(match, `metric ${name} is missing from /metrics`);
+  return Number(match[1]);
+}
+
 async function waitForEntries(app, expected) {
   const deadline = Date.now() + 5_000;
 
@@ -285,6 +291,31 @@ test('CacheNest proxies npm and PyPI, reuses the cache, and shuts down', async (
     const status = await health.json();
     assert.equal(status.status, 'ok');
     assert.ok(status.cacheBytes > 0);
+  });
+
+  await t.test('exposes Prometheus cache metrics without counting scrapes', async () => {
+    const firstResponse = await fetch(`${base}/metrics`);
+    assert.equal(firstResponse.status, 200);
+    assert.match(firstResponse.headers.get('content-type') ?? '', /text\/plain/);
+
+    const first = await firstResponse.text();
+    assert.ok(metricValue(first, 'cachenest_requests_total') > 0);
+    assert.ok(metricValue(first, 'cachenest_cache_hits_total') > 0);
+    assert.ok(metricValue(first, 'cachenest_cache_misses_total') > 0);
+    assert.ok(metricValue(first, 'cachenest_bandwidth_served_bytes_total') > 0);
+    assert.ok(metricValue(first, 'cachenest_bandwidth_saved_bytes_total') > 0);
+    assert.ok(metricValue(first, 'cachenest_uptime_seconds') >= 0);
+
+    const second = await (await fetch(`${base}/metrics`)).text();
+    assert.equal(
+      metricValue(second, 'cachenest_requests_total'),
+      metricValue(first, 'cachenest_requests_total'),
+      'metrics scrapes should not be counted as proxy requests',
+    );
+
+    const head = await fetch(`${base}/metrics`, { method: 'HEAD' });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), '');
   });
 
   await t.test('closes cleanly and is idempotent', async () => {
