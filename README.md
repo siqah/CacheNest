@@ -2,11 +2,14 @@
 
 CacheNest is a lightweight, local-first caching reverse proxy for **npm** and **PyPI**. It downloads each package once from the internet, stores it on local disk, and serves it from the cache on every later request.
 
-It is built for developers, students, and homelab enthusiasts working in regions or environments with metered, expensive, throttled, or unreliable internet connections, including many emerging tech hubs.
+For a visual walkthrough of the request flow, storage model, and design boundaries, see [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
+
+It is built for individual developers who want fast, predictable installs on their own machine, without accounts, shared infrastructure, or a service to administer.
 
 ## Contents
 
 - [Why CacheNest matters](#why-cachenest-matters)
+- [How CacheNest works](HOW-IT-WORKS.md)
 - [Who it is for](#who-it-is-for)
 - [Features](#features)
 - [Requirements](#requirements)
