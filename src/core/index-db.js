@@ -177,8 +177,6 @@ export class IndexDB {
         cause: error,
       });
     }
-
-    this.dbPath = resolvedPath;
   }
 
   #assertOpen() {

@@ -15,7 +15,6 @@ export class HttpError extends Error {
     this.statusCode = statusCode;
     this.code = code;
     this.headers = headers;
-    this.expose = statusCode < 500;
   }
 }
 

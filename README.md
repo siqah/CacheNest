@@ -77,6 +77,8 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 - Python 3 and pip, only if you want to exercise the PyPI side
 - Docker Engine with Compose v2, only if you want to run CacheNest in a container
 
+No Raspberry Pi, home server, or dedicated hardware is required. CacheNest runs on the same laptop or desktop you develop on, either directly with Node.js or in Docker. The default bind address is `127.0.0.1`, so the service is reachable only from that machine.
+
 ---
 
 ## Quick start
