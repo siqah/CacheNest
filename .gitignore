@@ -1,11 +1,115 @@
-node_modules/
-.env
-.env.local
-.DS_Store
+# ---------------------------------------------------------------------------
+# CacheNest
+# Keep source, tests, docs, and lockfiles in version control.
+# Ignore dependencies, local secrets, runtime data, build output, and OS files.
+# ---------------------------------------------------------------------------
 
-# Local cache data
-cache/
+# Dependencies
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+jspm_packages/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# CacheNest runtime data
 data/
+cache/
+.cachenest/
 *.sqlite
+*.sqlite3
 *.sqlite-shm
 *.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Logs and diagnostics
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.*.json
+diagnostic-report.*
+
+# Build output and tool caches
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.output/
+coverage/
+.nyc_output/
+.vite/
+.turbo/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+.jest-cache/
+.vitest/
+
+# Package and archive artifacts
+*.tgz
+*.tar.gz
+*.zip
+npm-pack-*
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+*.pid
+*.pid.lock
+*.seed
+*.swp
+*.swo
+*~
+
+# Editor and IDE files
+.idea/
+.vscode/
+*.iml
+*.sublime-workspace
+*.sublime-project
+
+# OS metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local A/B demo artifacts
+demo/
+demo-*/
+*-demo/
+cachenest-*-demo/
+
+# Local Docker overrides
+docker-compose.override.yml
