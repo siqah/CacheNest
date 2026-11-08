@@ -1,0 +1,22 @@
+services:
+  cachenest:
+    build:
+      context: .
+    image: cachenest:local
+    container_name: cachenest
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    ports:
+      - "${CACHENEST_BIND:-127.0.0.1}:${CACHENEST_PORT:-8787}:8787"
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      CACHE_DIR: "/app/data"
+      MAX_CACHE_GB: "${MAX_CACHE_GB:-10}"
+      UPSTREAM_NPM: "${UPSTREAM_NPM:-https://registry.npmjs.org}"
+      UPSTREAM_PYPI: "${UPSTREAM_PYPI:-https://pypi.org/simple}"
+      API_KEY: "${API_KEY:-}"
+    volumes:
+      # Persist cached blobs and the SQLite index on the host.
+      - ./data:/app/data

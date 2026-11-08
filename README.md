@@ -13,6 +13,7 @@ It is built for developers, students, and homelab enthusiasts working in regions
 - [Quick start](#quick-start)
 - [Startup output](#startup-output)
 - [Running on a laptop](#running-on-a-laptop)
+- [Running with Docker](#running-with-docker)
 - [Configuration](#configuration)
 - [Authentication](#authentication)
 - [Metrics](#metrics)
@@ -61,6 +62,7 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 - Supports optional API-key authentication for proxy, health, and metrics routes.
 - Exposes Prometheus-compatible request, cache, and bandwidth metrics at `/metrics`.
 - Prints copy-paste npm and pip commands at startup using the actual bound port and a client-friendly host.
+- Includes a small multi-stage Docker image with a health check and persistent cache volume.
 - Keeps monitoring and configuration local: one Node.js process, one SQLite index, and a directory of blobs.
 - Tracks entries in SQLite with size, creation time, and last-used time.
 - Enforces a size limit with LRU eviction.
@@ -75,6 +77,7 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 - Node.js **22 or newer**
 - npm
 - Python 3 and pip, only if you want to exercise the PyPI side
+- Docker Engine with Compose v2, only if you want to run CacheNest in a container
 
 ---
 
@@ -85,7 +88,7 @@ npm install
 npm start
 ```
 
-CacheNest runs with sensible defaults and does not require a `.env` file. When it starts, it prints copy-paste npm and pip commands for the current host and port.
+CacheNest runs with sensible defaults and does not require a `.env` file. When it starts, it prints copy-paste npm and pip commands for the current host and port. For a container-based setup, see [Running with Docker](#running-with-docker).
 
 By default the server listens on:
 
@@ -182,6 +185,89 @@ python3 -m pip install six \
   --index-url http://127.0.0.1:8787/pypi/simple \
   --trusted-host 127.0.0.1
 ```
+
+---
+
+## Running with Docker
+
+The repository includes a multi-stage `Dockerfile`, a `docker-compose.yml`, and a `.dockerignore`. The image uses Node.js 22 on Alpine, installs production dependencies in a separate build stage, runs as the unprivileged `node` user, and persists `/app/data` on the host. The image also includes a health check that calls `/health` and sends `API_KEY` when configured.
+
+### Start CacheNest
+
+Create the host cache directory first so the container user can write to it:
+
+```bash
+mkdir -p data
+docker compose up --build -d
+```
+
+Check the container and follow the logs:
+
+```bash
+docker compose ps
+docker compose logs -f cachenest
+curl http://127.0.0.1:8787/health
+```
+
+By default, Compose publishes the proxy only on `127.0.0.1:8787`. This keeps laptop testing local. Set `CACHENEST_BIND=0.0.0.0` when other devices should reach it.
+
+Use the container with npm:
+
+```bash
+npm install lodash --registry http://127.0.0.1:8787/npm
+```
+
+Use the container with pip:
+
+```bash
+python3 -m pip install six \
+  --index-url http://127.0.0.1:8787/pypi/simple \
+  --trusted-host 127.0.0.1
+```
+
+Run the same command twice to verify caching. The second request should be served from `./data`, and `/metrics` should show cache hits and saved bandwidth.
+
+### Docker configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CACHENEST_BIND` | `127.0.0.1` | Host interface for the published port. Use `0.0.0.0` for LAN access. |
+| `CACHENEST_PORT` | `8787` | Host port published by Compose. |
+| `MAX_CACHE_GB` | `10` | Cache limit passed to the container. |
+| `API_KEY` | unset | Optional API key passed into the container. |
+| `UPSTREAM_NPM` | `https://registry.npmjs.org` | Optional npm upstream override. |
+| `UPSTREAM_PYPI` | `https://pypi.org/simple` | Optional PyPI upstream override. |
+
+Compose automatically reads `.env` in the project root. To enable authentication, set `API_KEY` in `.env` or export it in your shell, then recreate the container:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+The cache is stored in `./data` on the host and survives container rebuilds and restarts. The image runs as UID `1000` (`node`). On Linux, if the cache directory is not writable, fix ownership while the container is stopped:
+
+```bash
+sudo chown -R 1000:1000 data
+```
+
+Stop the container without deleting cached data:
+
+```bash
+docker compose down
+```
+
+### Deploying to a Raspberry Pi
+
+1. Install Docker Engine and the Compose plugin on the Pi. Use 64-bit Raspberry Pi OS for an `arm64` image.
+2. Clone or copy this repository to the Pi.
+3. Create the cache directory with `mkdir -p data`.
+4. Optionally set `API_KEY` and `CACHENEST_BIND=0.0.0.0` in `.env`.
+5. Build and start the container with `docker compose up -d --build`.
+6. Point clients at the Pi's LAN address, for example `http://192.168.1.50:8787/npm` and `http://192.168.1.50:8787/pypi/simple`.
+
+Building on the Pi is the simplest option because the native `better-sqlite3` module is compiled for the target architecture. Cross-building for `linux/arm64` requires Docker buildx and a way to transfer the image, such as a registry or `docker save`/`docker load`.
+
+For shared deployments, set `API_KEY` and terminate TLS at a reverse proxy in front of CacheNest. See [Deployment notes](#deployment-notes).
 
 ---
 
@@ -521,6 +607,9 @@ curl http://127.0.0.1:8080/metrics
 ## Project layout
 
 ```text
+Dockerfile              Multi-stage Node 22 Alpine image with health check
+docker-compose.yml      Local and Raspberry Pi container setup
+.dockerignore           Build context exclusions
 src/
   config.js             Environment configuration and validation
   index.js              Entry point, startup banner, signal handling, graceful shutdown
@@ -552,6 +641,8 @@ test/
 ## Deployment notes
 
 - CacheNest does not terminate TLS. Use a reverse proxy such as Caddy, nginx, or Traefik for shared or internet-facing deployments.
+- For Docker deployments, use the included Compose file. `CACHENEST_BIND` defaults to `127.0.0.1`; set it to `0.0.0.0` only when LAN access is intended.
+- Build container images on the target architecture when possible so the native `better-sqlite3` module matches the host.
 - Set `API_KEY` before exposing CacheNest beyond a trusted local machine. The key is read at startup, so restart after changing it.
 - Without `API_KEY`, CacheNest has no authentication. Bind to `127.0.0.1` or keep it on a trusted network.
 - Restrict `/metrics` to your monitoring network or require the API key in the Prometheus scrape configuration.
