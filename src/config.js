@@ -109,7 +109,6 @@ const maxCacheGb = parseMaxCacheGb(readEnv('MAX_CACHE_GB'));
 
 export const config = Object.freeze({
   port: parsePort(readEnv('PORT')),
-  apiKey: readEnv('API_KEY') ?? null,
   cacheDir,
   maxCacheGb,
   maxCacheBytes: Math.floor(maxCacheGb * BYTES_PER_GB),

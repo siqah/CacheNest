@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_HOST = '0.0.0.0';
+const DEFAULT_HOST = '127.0.0.1';
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 
 function formatHost(address) {
@@ -53,27 +53,11 @@ export async function main() {
     `[cachenest] cache ${config.cacheDir} (max ${config.maxCacheGb} GB), npm ${config.upstream.npm}, pypi ${config.upstream.pypi}`,
   );
   logger.info(`[cachenest] metrics: ${baseUrl}/metrics`);
-
-  const authEnabled = typeof config.apiKey === 'string' && config.apiKey !== '';
+  logger.info('[cachenest] no authentication; keep the bind address on loopback for personal use');
+  logger.info(`[cachenest] npm: npm install <package> --registry ${baseUrl}/npm`);
   logger.info(
-    authEnabled
-      ? '[cachenest] API key authentication enabled (Bearer, Basic, or x-cachenest-key)'
-      : '[cachenest] API key authentication disabled (set API_KEY to enable)',
+    `[cachenest] pip: python3 -m pip install <package> --index-url ${baseUrl}/pypi/simple --trusted-host ${clientHost}`,
   );
-
-  if (authEnabled) {
-    logger.info(
-      `[cachenest] npm: npm config set //${formatHost(clientHost)}:${port}/npm/:_authToken "$API_KEY" && npm install <package> --registry ${baseUrl}/npm`,
-    );
-    logger.info(
-      `[cachenest] pip: python3 -m pip install <package> --index-url "http://cachenest:$API_KEY@${formatHost(clientHost)}:${port}/pypi/simple" --trusted-host ${clientHost}`,
-    );
-  } else {
-    logger.info(`[cachenest] npm: npm install <package> --registry ${baseUrl}/npm`);
-    logger.info(
-      `[cachenest] pip: python3 -m pip install <package> --index-url ${baseUrl}/pypi/simple --trusted-host ${clientHost}`,
-    );
-  }
 
   let shuttingDown = false;
 

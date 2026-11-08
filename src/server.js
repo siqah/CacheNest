@@ -6,13 +6,12 @@ import { Cache } from './core/cache.js';
 import { Eviction } from './core/eviction.js';
 import { IndexDB } from './core/index-db.js';
 import { BlobStore } from './core/store.js';
-import { createAuthMiddleware } from './middleware/auth.js';
 import { Metrics, createMetricsMiddleware, sendMetrics } from './middleware/metrics.js';
 import { createNpmRouter } from './routes/npm.js';
 import { createPypiRouter } from './routes/pypi.js';
 import { HttpError, parseRequestTarget, requireReadMethod } from './routes/common.js';
 
-const DEFAULT_HOST = '0.0.0.0';
+const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_GRACE_MS = 10_000;
 
 function requestPath(rawUrl) {
@@ -199,7 +198,6 @@ export class CacheNestServer {
 
     const requestLogger = createRequestLogger({ logger });
     const metricsMiddleware = createMetricsMiddleware({ metrics: this.metrics });
-    const authMiddleware = createAuthMiddleware({ apiKey: appConfig.apiKey ?? null });
 
     const handler = (request, response) => requestLogger(
       request,
@@ -207,11 +205,7 @@ export class CacheNestServer {
       () => metricsMiddleware(
         request,
         response,
-        () => authMiddleware(
-          request,
-          response,
-          () => this.#dispatch(request, response),
-        ),
+        () => this.#dispatch(request, response),
       ),
     );
 

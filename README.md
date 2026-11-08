@@ -15,7 +15,6 @@ It is built for developers, students, and homelab enthusiasts working in regions
 - [Running on a laptop](#running-on-a-laptop)
 - [Running with Docker](#running-with-docker)
 - [Configuration](#configuration)
-- [Authentication](#authentication)
 - [Metrics](#metrics)
 - [Using CacheNest with npm](#using-cachenest-with-npm)
 - [Using CacheNest with pip](#using-cachenest-with-pip)
@@ -34,8 +33,8 @@ It is built for developers, students, and homelab enthusiasts working in regions
 
 CacheNest addresses a hidden tax on software development: **redundant bandwidth consumption**.
 
-- **Bandwidth and cost savings:** Package managers constantly fetch the same dependencies across different projects, container builds, and team machines. A 50 MB package downloaded 20 times wastes 1 GB of data. CacheNest downloads it once from the WAN and serves it locally thereafter.
-- **Fast local installs:** Pulling a package from a local network or a small machine on your desk can take milliseconds instead of traversing international links to a distant CDN.
+- **Bandwidth and cost savings:** Package managers constantly fetch the same dependencies across your projects and container builds. A 50 MB package downloaded 20 times wastes 1 GB of data. CacheNest downloads it once from the internet and serves it locally thereafter.
+- **Fast local installs:** Pulling a package from your own disk takes milliseconds instead of traversing international links to a distant CDN.
 - **Resilience during outages and slow networks:** If the internet drops or bandwidth is severely throttled, cached packages can still be used to initialize projects and rebuild containers.
 
 CacheNest currently supports **npm** and **PyPI** package traffic. It is not a general-purpose HTTP or `apt` proxy.
@@ -44,10 +43,10 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 
 ## Who it is for
 
-- **Developers in metered or limited-bandwidth regions:** Engineers and remote workers who rely on mobile broadband or capped fiber plans where every gigabyte counts.
-- **Bootcamps, universities, and tech hubs:** Institutions where dozens of students pull heavy `node_modules` trees or Python virtual environments at the same time. One CacheNest node in a lab can prevent the whole classroom from bottlenecking the local network.
-- **Homelab enthusiasts and Raspberry Pi tinkerers:** People who run self-hosted, lightweight services on low-power local hardware.
-- **Hackathon teams:** Fast-paced events under tight time and network constraints, where reliable dependency installation can save hours of development time.
+- **Individual developers:** Anyone who reinstalls dependencies often across a few projects on one machine.
+- **Developers on metered or slow connections:** Mobile broadband or capped fiber plans where every gigabyte counts.
+- **Developers who want offline-friendly installs:** Cached packages keep working when the upstream registry is slow or unreachable.
+- **People who prefer simple tools:** One local process, one cache directory, no accounts, no service to administer.
 
 ---
 
@@ -59,7 +58,6 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 - Handles npm tarball URLs that lose their `/npm` path because of npm's registry-host rewriting.
 - Streams downloads to the client while writing them to disk concurrently.
 - Stores blobs durably with a flushed temporary file and atomic rename, so interrupted downloads never replace a complete cache entry.
-- Supports optional API-key authentication for proxy, health, and metrics routes.
 - Exposes Prometheus-compatible request, cache, and bandwidth metrics at `/metrics`.
 - Prints copy-paste npm and pip commands at startup using the actual bound port and a client-friendly host.
 - Includes a small multi-stage Docker image with a health check and persistent cache volume.
@@ -83,6 +81,8 @@ CacheNest currently supports **npm** and **PyPI** package traffic. It is not a g
 
 ## Quick start
 
+For the fastest path on a personal machine (Docker + npm/pip in about two minutes), see [QUICKSTART.md](QUICKSTART.md).
+
 ```bash
 npm install
 npm start
@@ -93,7 +93,7 @@ CacheNest runs with sensible defaults and does not require a `.env` file. When i
 By default the server listens on:
 
 ```text
-http://0.0.0.0:8080
+http://127.0.0.1:8080
 ```
 
 Check that it is running:
@@ -114,36 +114,26 @@ To customize the port, host, cache location, size limit, or upstreams, copy `.en
 
 ## Startup output
 
-At startup, CacheNest prints the resolved cache location, metrics URL, authentication mode, and client commands for the actual port. When the server binds to `0.0.0.0` or `::`, the client commands use `127.0.0.1` so they work from the same machine.
-
-Without authentication:
+At startup, CacheNest prints the resolved cache location, metrics URL, and copy-paste client commands for the actual port. When the server binds to a wildcard address (`0.0.0.0` or `::`), as the Docker image does internally, the client commands use `127.0.0.1`.
 
 ```text
-[cachenest] listening on http://0.0.0.0:8080
+[cachenest] listening on http://127.0.0.1:8080
 [cachenest] cache /Users/you/.cachenest (max 5 GB), npm https://registry.npmjs.org, pypi https://pypi.org/simple
 [cachenest] metrics: http://127.0.0.1:8080/metrics
-[cachenest] API key authentication disabled (set API_KEY to enable)
+[cachenest] no authentication; keep the bind address on loopback for personal use
 [cachenest] npm: npm install <package> --registry http://127.0.0.1:8080/npm
 [cachenest] pip: python3 -m pip install <package> --index-url http://127.0.0.1:8080/pypi/simple --trusted-host 127.0.0.1
 ```
 
-With `API_KEY` set:
-
-```text
-[cachenest] API key authentication enabled (Bearer, Basic, or x-cachenest-key)
-[cachenest] npm: npm config set //127.0.0.1:8080/npm/:_authToken "$API_KEY" && npm install <package> --registry http://127.0.0.1:8080/npm
-[cachenest] pip: python3 -m pip install <package> --index-url "http://cachenest:$API_KEY@127.0.0.1:8080/pypi/simple" --trusted-host 127.0.0.1
-```
-
-The API key value itself is never printed; the commands reference `$API_KEY` from your shell. The npm hint updates user-level npm configuration. Use the project-local `.npmrc` example under [Authentication](#authentication) if you do not want a user-level setting.
+CacheNest has no accounts or API keys. Access control is the bind address: the default is `127.0.0.1`, and the Docker setup publishes only on loopback.
 
 ---
 
 ## Running on a laptop
 
-A laptop is the best place to develop and test CacheNest before deploying it to a Raspberry Pi, home server, or shared lab machine.
+A laptop is the primary target: a small local cache for one developer, with no service to administer.
 
-To use port `8787`, bind only to the local machine, and keep the cache inside the project directory:
+To use port `8787` and keep the cache inside the project directory:
 
 ```bash
 PORT=8787 HOST=127.0.0.1 CACHE_DIR=./data npm start
@@ -156,7 +146,7 @@ This creates:
 ./data/blobs/         Cached package files
 ```
 
-The repository defaults are `PORT=8080`, `HOST=0.0.0.0`, and `CACHE_DIR=~/.cachenest`; the command above overrides them for a local-only laptop setup.
+The repository defaults are `PORT=8080`, `HOST=127.0.0.1`, and `CACHE_DIR=~/.cachenest`; the command above moves the cache into the project and changes the port.
 
 Laptop-specific advantages:
 
@@ -190,7 +180,7 @@ python3 -m pip install six \
 
 ## Running with Docker
 
-The repository includes a multi-stage `Dockerfile`, a `docker-compose.yml`, and a `.dockerignore`. The image uses Node.js 22 on Alpine, installs production dependencies in a separate build stage, runs as the unprivileged `node` user, and persists `/app/data` on the host. The image also includes a health check that calls `/health` and sends `API_KEY` when configured.
+The repository includes a multi-stage `Dockerfile`, a `docker-compose.yml`, and a `.dockerignore`. The image uses Node.js 22 on Alpine, installs production dependencies in a separate build stage, runs as the unprivileged `node` user, and persists `/app/data` on the host. The image also includes a health check that calls `/health`.
 
 ### Start CacheNest
 
@@ -209,7 +199,7 @@ docker compose logs -f cachenest
 curl http://127.0.0.1:8787/health
 ```
 
-By default, Compose publishes the proxy only on `127.0.0.1:8787`. This keeps laptop testing local. Set `CACHENEST_BIND=0.0.0.0` when other devices should reach it.
+Compose publishes the proxy only on `127.0.0.1:8787`. Keep it that way: CacheNest has no authentication and is intended for personal, local use.
 
 Use the container with npm:
 
@@ -231,14 +221,13 @@ Run the same command twice to verify caching. The second request should be serve
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CACHENEST_BIND` | `127.0.0.1` | Host interface for the published port. Use `0.0.0.0` for LAN access. |
+| `CACHENEST_BIND` | `127.0.0.1` | Host interface for the published port. Keep it on loopback. |
 | `CACHENEST_PORT` | `8787` | Host port published by Compose. |
 | `MAX_CACHE_GB` | `10` | Cache limit passed to the container. |
-| `API_KEY` | unset | Optional API key passed into the container. |
 | `UPSTREAM_NPM` | `https://registry.npmjs.org` | Optional npm upstream override. |
 | `UPSTREAM_PYPI` | `https://pypi.org/simple` | Optional PyPI upstream override. |
 
-Compose automatically reads `.env` in the project root. To enable authentication, set `API_KEY` in `.env` or export it in your shell, then recreate the container:
+Compose reads `.env` in the project root automatically. Apply changes by recreating the container:
 
 ```bash
 docker compose up -d --force-recreate
@@ -256,19 +245,6 @@ Stop the container without deleting cached data:
 docker compose down
 ```
 
-### Deploying to a Raspberry Pi
-
-1. Install Docker Engine and the Compose plugin on the Pi. Use 64-bit Raspberry Pi OS for an `arm64` image.
-2. Clone or copy this repository to the Pi.
-3. Create the cache directory with `mkdir -p data`.
-4. Optionally set `API_KEY` and `CACHENEST_BIND=0.0.0.0` in `.env`.
-5. Build and start the container with `docker compose up -d --build`.
-6. Point clients at the Pi's LAN address, for example `http://192.168.1.50:8787/npm` and `http://192.168.1.50:8787/pypi/simple`.
-
-Building on the Pi is the simplest option because the native `better-sqlite3` module is compiled for the target architecture. Cross-building for `linux/arm64` requires Docker buildx and a way to transfer the image, such as a registry or `docker save`/`docker load`.
-
-For shared deployments, set `API_KEY` and terminate TLS at a reverse proxy in front of CacheNest. See [Deployment notes](#deployment-notes).
-
 ---
 
 ## Configuration
@@ -278,21 +254,19 @@ CacheNest reads configuration from environment variables. A `.env` file is loade
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8080` | HTTP port to listen on. |
-| `HOST` | `0.0.0.0` | Interface to bind. Use `127.0.0.1` for local-only access. |
-| `API_KEY` | unset | Optional API key. When set, all routes require authentication. |
+| `HOST` | `127.0.0.1` | Interface to bind. Keep the default for local-only access. |
 | `CACHE_DIR` | `~/.cachenest` | Directory for `index.sqlite` and cached blobs. Supports `~/`. |
 | `MAX_CACHE_GB` | `5` | Maximum cache size in GB. Fractions such as `0.5` are allowed. |
 | `UPSTREAM_NPM` | `https://registry.npmjs.org` | npm registry base URL. |
 | `UPSTREAM_PYPI` | `https://pypi.org/simple` | PyPI Simple API base URL. |
 
-Configuration is read at startup; restart CacheNest after changing `.env` or environment variables. An empty `API_KEY` disables authentication. `CACHE_DIR` supports `~/`, but cannot be the filesystem root. Upstream URLs may include a path prefix for self-hosted registries, but must use `http` or `https` and must not contain embedded credentials. Invalid configuration stops startup with a `[config]` error.
+Configuration is read at startup; restart CacheNest after changing `.env` or environment variables. `CACHE_DIR` supports `~/`, but cannot be the filesystem root. Upstream URLs may include a path prefix for self-hosted registries, but must use `http` or `https` and must not contain embedded credentials. Invalid configuration stops startup with a `[config]` error.
 
 Example `.env`:
 
 ```env
-API_KEY=
 PORT=8080
-HOST=0.0.0.0
+HOST=127.0.0.1
 CACHE_DIR=~/.cachenest
 MAX_CACHE_GB=5
 UPSTREAM_NPM=https://registry.npmjs.org
@@ -304,55 +278,6 @@ To keep cached data inside a project or temporary directory, set `CACHE_DIR` exp
 ```bash
 CACHE_DIR=./data PORT=8080 npm start
 ```
-
----
-
-## Authentication
-
-Authentication is disabled when `API_KEY` is unset, which is the default for local use. Set `API_KEY` to protect every route, including `/health` and `/metrics`. Invalid or missing credentials receive `401 Unauthorized` with a `WWW-Authenticate` header.
-
-Generate a high-entropy key for a shared or network-accessible deployment:
-
-```bash
-openssl rand -hex 32
-```
-
-Clients can authenticate with any of these forms:
-
-```text
-Authorization: Bearer <API_KEY>
-x-cachenest-key: <API_KEY>
-```
-
-Basic authentication is also accepted, with the API key as either the username or password. This allows pip to use its standard credentials-in-URL form.
-
-Check authentication with curl:
-
-```bash
-curl -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8080/health
-curl -H "x-cachenest-key: $API_KEY" http://127.0.0.1:8080/health
-```
-
-For npm, a project-local `.npmrc` can contain:
-
-```ini
-registry=http://127.0.0.1:8080/npm
-//127.0.0.1:8080/npm/:_authToken=${API_KEY}
-```
-
-The startup banner shows an alternative `npm config set` command. That command updates user-level npm configuration; the project-local `.npmrc` above is preferable when only one project should use CacheNest.
-
-For pip, the API key can be passed as the password:
-
-```bash
-python3 -m pip install six \
-  --index-url "http://cachenest:$API_KEY@127.0.0.1:8080/pypi/simple" \
-  --trusted-host 127.0.0.1
-```
-
-Credentials in a URL may appear in shell history or process listings. For shared systems, prefer a credentials file or environment-based configuration.
-
-CacheNest compares API keys in constant time, does not log or persist the key itself, and removes its own auth headers before forwarding the request. This prevents the key from reaching upstream registries and keeps package responses cacheable.
 
 ---
 
@@ -379,12 +304,6 @@ Example:
 curl http://127.0.0.1:8080/metrics
 ```
 
-If `API_KEY` is set, the scrape request must include it:
-
-```bash
-curl -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8080/metrics
-```
-
 Prometheus scrape configuration:
 
 ```yaml
@@ -392,8 +311,6 @@ scrape_configs:
   - job_name: cachenest
     static_configs:
       - targets: ["127.0.0.1:8080"]
-    authorization:
-      credentials: "<API_KEY>"   # omit when API_KEY is not set
 ```
 
 Useful PromQL queries:
@@ -432,7 +349,7 @@ Then run normal npm commands:
 npm install
 ```
 
-When `API_KEY` is set, add the `_authToken` line shown under [Authentication](#authentication). Avoid changing your global npm configuration unless you intend every project to use CacheNest.
+Prefer a project-local `.npmrc` over changing your global npm configuration, so only the projects you choose use CacheNest.
 
 npm normally rewrites tarball hosts and can drop the `/npm` path. CacheNest accepts both forms:
 
@@ -464,9 +381,9 @@ python3 -m pip download six \
   --trusted-host 127.0.0.1
 ```
 
-CacheNest rewrites package links in PyPI Simple JSON and HTML responses to local `/pypi/files/...` URLs, so both metadata and wheel/sdist downloads pass through the cache. When `API_KEY` is set, use the credentials-in-URL form shown under [Authentication](#authentication).
+CacheNest rewrites package links in PyPI Simple JSON and HTML responses to local `/pypi/files/...` URLs, so both metadata and wheel/sdist downloads pass through the cache.
 
-The `--no-cache-dir` flag only disables pip's local wheel cache; it does not bypass CacheNest. The `--trusted-host` flag is required because pip is talking to a plain HTTP local endpoint. For shared deployments, put CacheNest behind a TLS-terminating reverse proxy.
+The `--no-cache-dir` flag only disables pip's local wheel cache; it does not bypass CacheNest. The `--trusted-host` flag is required because pip is talking to a plain HTTP local endpoint.
 
 ---
 
@@ -483,7 +400,7 @@ The `--no-cache-dir` flag only disables pip's local wheel cache; it does not byp
 | `GET/HEAD /health` | none | Health and cache size. |
 | `GET/HEAD /metrics` | none | Prometheus metrics. |
 
-When `API_KEY` is set, every route in this table requires authentication, including `/health` and `/metrics`. Unsupported methods return `405`.
+Unsupported methods return `405`.
 
 ---
 
@@ -505,7 +422,6 @@ It covers:
 - PyPI JSON and HTML link rewriting
 - wheel downloads and cache hits
 - `HEAD`, `405`, `/health`, and graceful shutdown
-- API-key authentication and auth-header stripping
 - Prometheus metrics and scrape exclusion
 - atomic blob writes and failed-download cleanup
 
@@ -555,7 +471,7 @@ sqlite3 "$CACHE_DIR/index.sqlite" \
 
 - Only successful `GET` responses with status `200` are stored.
 - `HEAD` requests are served from cache when possible but do not create entries.
-- Responses to requests that still carry an upstream `Authorization` header are not stored. CacheNest strips its own API-key credentials before this check, so authenticated installs can still be cached.
+- Responses to requests that carry an upstream `Authorization` header are not stored. This keeps authenticated upstream traffic out of the cache.
 - Responses with `Cache-Control: no-store`, `no-cache`, or `private` are not stored.
 - Responses with `Vary: *` are not stored.
 - Cache keys are SHA-256 hashes derived from the request method and path, including the query string when present.
@@ -587,17 +503,14 @@ find "$CACHE_DIR/blobs" -type f -name '*.tmp' -delete
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `401 Unauthorized` | `API_KEY` is set and the request is missing or has an invalid key. | Send `Authorization: Bearer $API_KEY` or `x-cachenest-key: $API_KEY`. This includes `/health` and `/metrics` requests. |
 | `EADDRINUSE` at startup | Another process is using the configured port. | Choose another `PORT`, or find the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`. |
-| Connection refused from another machine | CacheNest is bound to `127.0.0.1`. | Set `HOST=0.0.0.0` and allow the port through the host firewall. |
-| pip warns that the index is not trusted | The local endpoint uses plain HTTP. | Keep `--trusted-host 127.0.0.1`, or put CacheNest behind a TLS-terminating reverse proxy. |
+| Connection refused from another machine | CacheNest is bound to `127.0.0.1` by design. | Use it from the same machine. CacheNest is a personal, local-only cache. |
+| pip warns that the index is not trusted | The local endpoint uses plain HTTP. | Keep `--trusted-host 127.0.0.1`. |
 | Cache hits stay at zero | Only successful proxy `GET` responses that are cacheable count as lookups. The first request is a miss, and `/health` and `/metrics` are not cache lookups. | Run the same package request twice, then check `/metrics`. Also inspect upstream `Cache-Control`, `Vary`, and whether a separate upstream `Authorization` header is being sent. |
-| `/metrics` returns `401` | The metrics route is protected by `API_KEY`. | Add the same credentials to the Prometheus scrape configuration. |
 
 To confirm the proxy is alive and the cache is receiving traffic:
 
 ```bash
-# Add -H "Authorization: Bearer $API_KEY" to both commands when API_KEY is set.
 curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8080/metrics
 ```
@@ -608,7 +521,7 @@ curl http://127.0.0.1:8080/metrics
 
 ```text
 Dockerfile              Multi-stage Node 22 Alpine image with health check
-docker-compose.yml      Local and Raspberry Pi container setup
+docker-compose.yml      Local Docker Compose setup
 .dockerignore           Build context exclusions
 src/
   config.js             Environment configuration and validation
@@ -620,7 +533,6 @@ src/
     index-db.js         SQLite cache index in WAL mode
     store.js            Durable atomic sharded blob storage
   middleware/
-    auth.js             Optional API-key authentication and credential stripping
     metrics.js          Request, cache, and bandwidth counters plus Prometheus output
   routes/
     common.js           Shared route helpers
@@ -631,8 +543,8 @@ src/
   utils/
     hash.js             SHA-256 cache keys
 test/
-  auth-metrics.test.js  Authentication, cache-under-auth, and metrics tests
   integration.test.js   Offline npm/PyPI integration tests
+  metrics.test.js       Health, metrics, and cache-hit tests
   store.test.js         Atomic blob-write and failure-cleanup tests
 ```
 
@@ -640,12 +552,9 @@ test/
 
 ## Deployment notes
 
-- CacheNest does not terminate TLS. Use a reverse proxy such as Caddy, nginx, or Traefik for shared or internet-facing deployments.
-- For Docker deployments, use the included Compose file. `CACHENEST_BIND` defaults to `127.0.0.1`; set it to `0.0.0.0` only when LAN access is intended.
-- Build container images on the target architecture when possible so the native `better-sqlite3` module matches the host.
-- Set `API_KEY` before exposing CacheNest beyond a trusted local machine. The key is read at startup, so restart after changing it.
-- Without `API_KEY`, CacheNest has no authentication. Bind to `127.0.0.1` or keep it on a trusted network.
-- Restrict `/metrics` to your monitoring network or require the API key in the Prometheus scrape configuration.
+- CacheNest is built for **personal, local use**. It has no authentication and no accounts.
+- Keep the bind address on loopback: `HOST=127.0.0.1` for `npm start`, and `CACHENEST_BIND=127.0.0.1` for Docker Compose. The Docker image binds `0.0.0.0` internally so published ports work; the host side stays loopback.
+- Do not expose CacheNest to other devices or the internet.
 - Set `CACHE_DIR` to a disk with enough capacity for your dependency set.
 - Metrics are per-process. If you run multiple CacheNest instances, scrape each one separately or aggregate them in Prometheus.
 - SQLite runs in WAL mode. Include `index.sqlite`, `index.sqlite-wal`, and `index.sqlite-shm` when backing up a live cache directory; the blobs directory must be backed up with it.

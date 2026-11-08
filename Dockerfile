@@ -19,6 +19,10 @@ ENV NODE_ENV=production \
     CACHE_DIR=/app/data \
     MAX_CACHE_GB=10
 
+# HOST stays 0.0.0.0 inside the container so Docker can forward the published
+# port. Exposure is controlled on the host by CACHENEST_BIND (loopback by
+# default), and there is no authentication.
+
 WORKDIR /app
 
 # Run as the unprivileged node user that ships with the official image.
@@ -35,7 +39,7 @@ EXPOSE 8787
 VOLUME ["/app/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/health',{headers:process.env.API_KEY?{authorization:'Bearer '+process.env.API_KEY}:{}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 STOPSIGNAL SIGTERM
 

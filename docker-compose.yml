@@ -16,7 +16,6 @@ services:
       MAX_CACHE_GB: "${MAX_CACHE_GB:-10}"
       UPSTREAM_NPM: "${UPSTREAM_NPM:-https://registry.npmjs.org}"
       UPSTREAM_PYPI: "${UPSTREAM_PYPI:-https://pypi.org/simple}"
-      API_KEY: "${API_KEY:-}"
     volumes:
       # Persist cached blobs and the SQLite index on the host.
       - ./data:/app/data
